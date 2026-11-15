@@ -1,5 +1,5 @@
 // Things 3 to-dos in a Herdr panel, read from the Things app through AppleScript (JXA).
-// Click the box to complete, the title to open it in Things, the header to pick which list to show.
+// Click the box to complete (⌥-click or the ✕ to cancel), the title to open it in Things, the header to pick which list to show.
 //
 // Block props (all optional):
 //   list     list shown until one is picked: inbox, today, upcoming, anytime, someday   default "today"
@@ -25,7 +25,7 @@ const PRESETS = [
 ];
 
 // Runs inside osascript with argv: list <list|project|area|tag> <id or tag name>, search <text>,
-// sources, complete <id>. Prints JSON. Things isn't launched: a closed app answers { closed: true }.
+// sources, complete <id>, cancel <id>. Prints JSON. Things isn't launched: a closed app answers { closed: true }.
 const SCRIPT = String.raw`
 function run(argv) {
   const [cmd, a, b] = argv;
@@ -67,8 +67,8 @@ function run(argv) {
       tags: app.tags.name(),
     });
   }
-  if (cmd === "complete") {
-    app.toDos.byId(a).status = "completed";
+  if (cmd === "complete" || cmd === "cancel") {
+    app.toDos.byId(a).status = cmd === "complete" ? "completed" : "canceled";
     return JSON.stringify({ ok: true });
   }
   throw new Error("unknown command " + cmd);
@@ -108,7 +108,7 @@ const listArgs = (view) =>
 const cleanError = (s) => s.replace(/^.*?execution error:\s*(Error:\s*)*/s, "").trim();
 
 // Text from the user or from Things only ever travels as argv after a command word (list, search,
-// complete), never inside the script: osascript stops reading options there, and no shell runs.
+// complete, cancel), never inside the script: osascript stops reading options there, and no shell runs.
 // -1743: Herdr isn't allowed to send Apple events to Things. -2700/-10814: Things isn't installed.
 async function things(args) {
   const r = await exec("osascript", ["-l", "JavaScript", "-e", SCRIPT, ...args], { timeout: 20000 });
@@ -139,7 +139,8 @@ export default class Things extends View {
     this.loading = true;
     this.refreshing = false;
     this.again = false;
-    this.pending = new Set();
+    // id → "complete" or "cancel", while Things applies it.
+    this.pending = new Map();
     this.hovered = null;
     this.sel = 0;
     this.handle = cx.focus_handle();
@@ -191,13 +192,14 @@ export default class Things extends View {
     });
   }
 
-  complete(task, cx) {
+  // action: "complete", or "cancel" for a to-do you won't do.
+  finish(task, action, cx) {
     if (this.pending.has(task.id)) return;
-    this.pending.add(task.id);
+    this.pending.set(task.id, action);
     cx.notify();
     cx.spawn(async (cx) => {
       try {
-        await things(["complete", task.id]);
+        await things([action, task.id]);
       } catch (e) {
         this.error = String(e?.message ?? e);
       }
@@ -211,7 +213,7 @@ export default class Things extends View {
     openOverlay({ mod: "things", kind, width: 280, height: 440, props: { menu: true, key: config().key } });
   }
 
-  // j/k move, x completes, Enter opens, r refreshes, / or m picks a list, l or Esc goes back.
+  // j/k move, x completes, c cancels, Enter opens, r refreshes, / or m picks a list, l or Esc goes back.
   panelKey(e, cx) {
     const k = e.key;
     const n = this.tasks.length;
@@ -225,7 +227,8 @@ export default class Things extends View {
     else if (k === "k" || k === "up") move(this.sel - 1);
     else if (k === "G" || (k === "g" && e.modifiers?.shift)) move(n - 1);
     else if (k === "g") move(0);
-    else if (k === "x" || k === "space") task && this.complete(task, cx);
+    else if (k === "x" || k === "space") task && this.finish(task, "complete", cx);
+    else if (k === "c") task && this.finish(task, "cancel", cx);
     else if (k === "enter" || k === "o") task && openInThings(task.id);
     else if (k === "r") this.refresh(cx);
     else if (k === "/" || k === "m") this.openMenu("dialog");
@@ -237,7 +240,10 @@ export default class Things extends View {
 
   row(t, task, now, i, focused) {
     const selected = focused && i === this.sel;
-    const done = this.pending.has(task.id);
+    const action = this.pending.get(task.id);
+    const done = Boolean(action);
+    const canceled = action === "cancel";
+    const hovered = this.hovered === task.id;
     const late = Boolean(task.deadline) && task.deadline <= now;
     return h_flex()
       .id(`th-${task.id}`)
@@ -263,11 +269,16 @@ export default class Things extends View {
           .border(1.5)
           .border_color(late ? t.ansi1 : t.dim)
           .cursor_pointer()
-          .when(done || this.hovered === task.id, (el) => el.bg(late ? t.ansi1 : t.dim))
-          .tooltip("Complete")
-          .on_click((_e, cx) => {
+          .flex()
+          .items_center()
+          .justify_center()
+          .text_color(t.dim)
+          .when(canceled, (el) => el.child(svg("mods/things/x.svg").size(10)))
+          .when(!canceled && (done || hovered), (el) => el.bg(late ? t.ansi1 : t.dim))
+          .tooltip("Complete · ⌥-click to cancel")
+          .on_click((e, cx) => {
             cx.stop_propagation();
-            this.complete(task, cx);
+            this.finish(task, e.modifiers?.alt ? "cancel" : "complete", cx);
           }),
       )
       .child(
@@ -278,9 +289,26 @@ export default class Things extends View {
           .truncate()
           .cursor_pointer()
           .text_color(done ? t.dim : t.foreground)
+          .when(canceled, (el) => el.line_through())
           .tooltip(task.parent ? `${task.parent} · Open in Things` : "Open in Things")
           .on_click(() => openInThings(task.id))
           .child(task.name),
+      )
+      .when(hovered && !done, (el) =>
+        el.child(
+          div()
+            .id(`th-cancel-${task.id}`)
+            .flex_none()
+            .cursor_pointer()
+            .text_color(t.dim)
+            .hover((s) => s.text_color(t.foreground))
+            .tooltip("Cancel · won't do")
+            .on_click((_e, cx) => {
+              cx.stop_propagation();
+              this.finish(task, "cancel", cx);
+            })
+            .child(svg("mods/things/x.svg").size(13)),
+        ),
       )
       .when(Boolean(task.deadline), (el) =>
         el.child(div().flex_none().text_size(11).text_color(late ? t.ansi1 : t.dim).child(shortDate(task.deadline))),
@@ -374,7 +402,7 @@ export default class Things extends View {
             .flex_none()
             .text_size(10.5)
             .text_color(t.dim)
-            .child("j/k move · x done · ⏎ open · / list · l back"),
+            .child("j/k move · x done · c cancel · ⏎ open · / list · l back"),
         ),
       );
   }

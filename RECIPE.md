@@ -1,8 +1,8 @@
 # things
 
 A panel of your Things 3 to-dos, Today by default, in your existing Herdr
-window. Each row has a box that completes the to-do and a title that opens it
-in Things.
+window. Each row has a box that completes the to-do, a ✕ that cancels it, and a
+title that opens it in Things.
 
 ![things](preview.png)
 
@@ -29,6 +29,10 @@ in Things.
 - Hovering a box fills it. Clicking it completes the to-do (its AppleScript
   `status` set to `completed`), greys the row while pending, then reads the
   list again.
+- ⌥-clicking a box, clicking the row's ✕ (shown on hover, 13px `dim`, `foreground`
+  on hover, tooltip "Cancel · won't do") or `c` cancels the to-do (`status`
+  set to `canceled`): while pending the box shows a 10px ✕ and the title is
+  `dim` and struck through, then the list is read again.
 - Clicking a title opens the to-do (`open things:///show?id=<id>`).
 - Clicking the header opens a 280x440 popup: a search input (Enter lists the
   open to-dos of Inbox, Today, Upcoming, Anytime and Someday whose title
@@ -51,7 +55,7 @@ in Things.
 - `mod.json` has `"focusable": true`: `pane.go` gives the panel the keyboard
   (it gets `"focus"` from `nextCommand()` and focuses its handle). Focused,
   the selected row has the `selected` background and a 10.5px `dim` footer
-  lists the keys: `j`/`k`, `g`/`G`, `x`/Space complete, Enter/`o` open, `r`
+  lists the keys: `j`/`k`, `g`/`G`, `x`/Space complete, `c` cancel, Enter/`o` open, `r`
   refresh, `/`/`m` the picker (as a dialog), `l`/Esc `pane.go` right.
 - A failed read shows its error in `ansi1` above the list. It keeps the last
   rows of the same list, and clears them when the failing list is a new one
@@ -69,9 +73,9 @@ in Things.
 - A JXA script kept in `main.js` and run with
   `exec("osascript", ["-l", "JavaScript", "-e", SCRIPT, ...argv])`. Its
   commands: `list <list|project|area|tag> <id or tag name>`, `search <text>`,
-  `sources`, `complete <id>`. It prints JSON, and `{ "closed": true }` when
+  `sources`, `complete <id>`, `cancel <id>`. It prints JSON, and `{ "closed": true }` when
   Things isn't running (it never launches the app). Icons: `refresh.svg`,
-  `chevron-down.svg`, `check.svg`. The popup is the same mod with
+  `chevron-down.svg`, `check.svg`, `x.svg`. The popup is the same mod with
   `props.menu`.
 - No network access, no token, no password, no Full Disk Access: the Things
   app answers.
@@ -103,6 +107,8 @@ in Things.
 - `herdr-app check ~/.config/herdr-app/mods/things` passes.
 - The panel lists the same to-dos as Things' Today list.
 - Clicking a box completes that to-do in Things and the row disappears.
+- ⌥-clicking a box, or its row's ✕, cancels it in Things (it shows as
+  canceled in the logbook) and the row disappears.
 - Clicking a title opens the to-do in Things.
 - With a `list` prop, the panel shows that list.
 - Picking an area, a project or a tag in the header popup lists its to-dos
