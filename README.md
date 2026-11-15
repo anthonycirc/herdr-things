@@ -2,7 +2,8 @@
 
 A [Herdr](https://herdr.dev) desktop mod that shows your [Things 3](https://culturedcode.com/things/)
 to-dos in a panel, next to your terminals and agents. Click a to-do's box to
-complete it, click its title to open it in Things, click the header to pick
+complete it, ⌥-click it (or click the ✕ on hover) to cancel a to-do you won't
+do, click its title to open it in Things, click the header to pick
 which list to show.
 
 ![herdr-things](preview.png)
@@ -91,6 +92,11 @@ The to-do's title, and its deadline on the right when it has one, red once
 the deadline is today or past (its box turns red too). Hover the title to see
 its project or area.
 
+Hovering a row shows a ✕ on the right: it cancels the to-do, as Things'
+"won't do". ⌥-clicking the box does the same. A canceled to-do is struck
+through until the list is read again, then it leaves the list for Things'
+logbook.
+
 ## Configure
 
 Set `props` on the block. All of them are optional.
@@ -117,6 +123,7 @@ The panel takes the keyboard like a pane: `pane.go` reaches it, for example
 | `j` / `k`        | Next / previous to-do            |
 | `g` / `G`        | First / last to-do               |
 | `x` or `Space`   | Complete the selected to-do      |
+| `c`              | Cancel it (won't do)             |
 | `Enter` or `o`   | Open it in Things                |
 | `r`              | Refresh                          |
 | `/` or `m`       | Pick a list                      |
@@ -142,7 +149,7 @@ example:
 - `osascript -l JavaScript` with the script in `main.js`, which asks the
   Things app for a list's open to-dos on each refresh, for the areas,
   projects and tags when the list picker opens, and sets a to-do's status to
-  completed when you complete it
+  completed or canceled when you complete or cancel it
 - `open things:///show?id=<id>` when you open a to-do
 
 Everything runs on the local machine and needs the Things Mac app, so a remote
